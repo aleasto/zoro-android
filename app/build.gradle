@@ -1,0 +1,59 @@
+apply plugin: 'com.android.application'
+
+def keyPropertiesFile = rootProject.file("key.properties")
+def keyProperties = new Properties()
+keyProperties.load(new FileInputStream(keyPropertiesFile))
+
+android {
+    signingConfigs {
+        release {
+            storeFile file(keyProperties['KEYSTORE_FILE'])
+            storePassword keyProperties['KEYSTORE_PASSWORD']
+            keyAlias keyProperties['KEYSTORE_KEY_ALIAS']
+            keyPassword keyProperties['KEYSTORE_KEY_PASSWORD']
+        }
+    }
+    compileSdkVersion 29
+    buildToolsVersion "29.0.3"
+
+    defaultConfig {
+        applicationId "com.aleasto.zoro"
+        minSdkVersion 29
+        targetSdkVersion 29
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField "String", "HTTP_ACCESS_TOKEN", keyProperties['HTTP_ACCESS_TOKEN']
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+
+            buildConfigField "String", "SERVER_ADDRESS", '"http://zoro.azurewebsites.net"'
+        }
+        debug {
+            buildConfigField "String", "SERVER_ADDRESS", '"http://192.168.1.2:3000"'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    implementation fileTree(dir: "libs", include: ["*.jar"])
+    implementation 'androidx.appcompat:appcompat:1.1.0'
+    implementation 'androidx.constraintlayout:constraintlayout:1.1.3'
+    testImplementation 'junit:junit:4.12'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.1'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
+    implementation 'com.google.android.gms:play-services-location:17.0.0'
+    implementation 'com.kyleduo.switchbutton:library:2.0.2'
+}
