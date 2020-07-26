@@ -20,6 +20,7 @@ import android.provider.Settings;
 import android.util.Log;
 import android.widget.CompoundButton;
 import android.widget.Switch;
+import android.widget.Toast;
 
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.common.api.ResolvableApiException;
@@ -32,6 +33,7 @@ import com.google.android.gms.location.LocationSettingsStatusCodes;
 import com.google.android.gms.tasks.Task;
 import com.kyleduo.switchbutton.SwitchButton;
 
+import java.io.IOException;
 import java.util.Arrays;
 
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
@@ -39,7 +41,6 @@ import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 public class MainActivity extends AppCompatActivity {
     private static final int REQUEST_CHECK_PERMISSIONS = 1;
     private static final int REQUEST_CHECK_LOCATION_SETTINGS = 2;
-    private static final int REQUEST_CHECK_DOZE_SETTINGS = 3;
 
     private SwitchButton trackerServiceSwitch;
 
@@ -98,11 +99,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void requestDisableDoze() {
-        Intent intent = new Intent();
-        String packageName = getPackageName();
-        intent.setAction(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
-        intent.setData(Uri.parse("package:" + packageName));
-        startActivityForResult(intent, REQUEST_CHECK_DOZE_SETTINGS);
+        try {
+            Process p = Runtime.getRuntime().exec(new String[] { "su", "-c", "dumpsys", "deviceidle", "disable" });
+            p.waitFor();
+            if (p.exitValue() != 0) throw new IOException();
+            requestLocationAccess();
+        } catch (IOException | InterruptedException e) {
+            Toast.makeText(this, "Please grant root access to continue.", Toast.LENGTH_LONG).show();
+            e.printStackTrace();
+            stopTrackerService();
+        }
     }
 
     @Override
@@ -121,12 +127,6 @@ public class MainActivity extends AppCompatActivity {
                         break;
                 }
                 break;
-            case REQUEST_CHECK_DOZE_SETTINGS:
-                if (getSystemService(PowerManager.class).isIgnoringBatteryOptimizations(getPackageName())) {
-                    requestLocationAccess();
-                } else {
-                    stopTrackerService();
-                }
         }
     }
 
@@ -143,6 +143,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private synchronized void stopTrackerService() {
+        // attempt to restore doze state
+        try {
+            Runtime.getRuntime().exec(new String[] { "su", "-c", "dumpsys", "deviceidle", "enable" });
+        } catch (IOException ignored) { }
         Intent intent = new Intent(this, TrackerService.class);
         stopService(intent);
         updateTrackerSwitch();
