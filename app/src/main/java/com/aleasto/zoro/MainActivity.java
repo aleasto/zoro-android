@@ -12,8 +12,11 @@ import android.app.ActivityManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentSender;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
+import android.provider.Settings;
 import android.util.Log;
 import android.widget.CompoundButton;
 import android.widget.Switch;
@@ -35,7 +38,8 @@ import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 
 public class MainActivity extends AppCompatActivity {
     private static final int REQUEST_CHECK_PERMISSIONS = 1;
-    private static final int REQUEST_CHECK_SETTINGS = 2;
+    private static final int REQUEST_CHECK_LOCATION_SETTINGS = 2;
+    private static final int REQUEST_CHECK_DOZE_SETTINGS = 3;
 
     private SwitchButton trackerServiceSwitch;
 
@@ -82,7 +86,7 @@ public class MainActivity extends AppCompatActivity {
                             ResolvableApiException resolvable = (ResolvableApiException) exception;
                             resolvable.startResolutionForResult(
                                     MainActivity.this,
-                                    REQUEST_CHECK_SETTINGS);
+                                    REQUEST_CHECK_LOCATION_SETTINGS);
                         } catch (IntentSender.SendIntentException | ClassCastException ignored) {}
                         break;
                     case LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE:
@@ -93,11 +97,19 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    private void requestDisableDoze() {
+        Intent intent = new Intent();
+        String packageName = getPackageName();
+        intent.setAction(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+        intent.setData(Uri.parse("package:" + packageName));
+        startActivityForResult(intent, REQUEST_CHECK_DOZE_SETTINGS);
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent intent) {
         super.onActivityResult(requestCode, resultCode, intent);
         switch (requestCode) {
-            case REQUEST_CHECK_SETTINGS:
+            case REQUEST_CHECK_LOCATION_SETTINGS:
                 switch (resultCode) {
                     case Activity.RESULT_OK:
                         startTrackerService();
@@ -109,13 +121,19 @@ public class MainActivity extends AppCompatActivity {
                         break;
                 }
                 break;
+            case REQUEST_CHECK_DOZE_SETTINGS:
+                if (getSystemService(PowerManager.class).isIgnoringBatteryOptimizations(getPackageName())) {
+                    requestLocationAccess();
+                } else {
+                    stopTrackerService();
+                }
         }
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         if (Arrays.stream(grantResults).allMatch(i -> i == PERMISSION_GRANTED))
-            requestLocationAccess(); // and start service
+            requestDisableDoze(); // and request location access, then start service
     }
 
     private synchronized void startTrackerService() {
