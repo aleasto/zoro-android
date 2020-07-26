@@ -16,6 +16,8 @@ import android.net.NetworkCapabilities;
 import android.os.BatteryManager;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.PowerManager;
+import android.os.PowerManager.WakeLock;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 
@@ -46,6 +48,7 @@ public class TrackerService extends Service {
     private FusedLocationProviderClient fusedLocationClient;
     private LocationCallback locationCallback;
     private Notification foregroundNotification;
+    private WakeLock wakeLock;
 
     @Nullable
     @Override
@@ -73,6 +76,9 @@ public class TrackerService extends Service {
                 }
             }
         };
+
+        PowerManager pm = getSystemService(PowerManager.class);
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, TAG + "::WakeLock");
 
         super.onCreate();
     }
@@ -142,6 +148,7 @@ public class TrackerService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        wakeLock.acquire();
         startLocationUpdates();
         startForeground(1, foregroundNotification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
         return START_STICKY;
@@ -153,6 +160,7 @@ public class TrackerService extends Service {
     }
 
     private void stop() {
+        wakeLock.release();
         stopLocationUpdates();
         stopForeground(true);
         stopSelf();
