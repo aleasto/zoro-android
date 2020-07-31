@@ -13,6 +13,8 @@ import android.location.Location;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
 import android.os.BatteryManager;
 import android.os.IBinder;
 import android.os.Looper;
@@ -101,6 +103,7 @@ public class TrackerService extends Service {
                 body.put("acc", location.getAccuracy());
                 body.put("bat", getSystemService(BatteryManager.class).getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY));
                 body.put("net", getNetworkType());
+                body.put("sig", getSignalLevel());
 
                 DataOutputStream os = new DataOutputStream(conn.getOutputStream());
                 os.writeBytes(body.toString());
@@ -144,6 +147,19 @@ public class TrackerService extends Service {
             case TelephonyManager.NETWORK_TYPE_IWLAN: return "IWLAN";
             default: return "UNKNOWN";
         }
+    }
+
+    private int getSignalLevel() {
+        ConnectivityManager cm = getSystemService(ConnectivityManager.class);
+        Network activeNetwork = cm.getActiveNetwork();
+        if (activeNetwork != null && cm.getNetworkCapabilities(activeNetwork).hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+            WifiManager wm = getSystemService(WifiManager.class);
+            WifiInfo wi = wm.getConnectionInfo();
+            return WifiManager.calculateSignalLevel(wi.getRssi(), 5 /* levels 0~4 */);
+        }
+
+        TelephonyManager tm = getSystemService(TelephonyManager.class);
+        return tm.getSignalStrength().getLevel();
     }
 
     @Override
