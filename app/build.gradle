@@ -24,8 +24,6 @@ android {
         versionName "1.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-
-        buildConfigField "String", "HTTP_ACCESS_TOKEN", keyProperties['HTTP_ACCESS_TOKEN']
     }
 
     buildTypes {
@@ -35,9 +33,11 @@ android {
             signingConfig signingConfigs.release
 
             buildConfigField "String", "SERVER_ADDRESS", '"http://zoro.azurewebsites.net"'
+            buildConfigField "String", "HTTP_ACCESS_TOKEN", keyProperties['HTTP_ACCESS_TOKEN']
         }
         debug {
             buildConfigField "String", "SERVER_ADDRESS", '"http://192.168.1.2:3000"'
+            buildConfigField "String", "HTTP_ACCESS_TOKEN", '""'
         }
     }
 
