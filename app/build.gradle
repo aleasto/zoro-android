@@ -37,7 +37,7 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             signingConfig signingConfigs.release
 
-            buildConfigField "String", "SERVER_ADDRESS", '"http://zoro.azurewebsites.net"'
+            buildConfigField "String", "SERVER_ADDRESS", '"http://carlotta.azurewebsites.net"'
             buildConfigField "String", "HTTP_ACCESS_TOKEN", keyProperties['HTTP_ACCESS_TOKEN']
         }
         debug {
