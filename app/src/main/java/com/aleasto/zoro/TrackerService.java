@@ -40,6 +40,8 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 
 public class TrackerService extends Service {
     private static final String TAG = "ZoroTrackerService";
@@ -51,6 +53,9 @@ public class TrackerService extends Service {
     private LocationCallback locationCallback;
     private Notification foregroundNotification;
     private WakeLock wakeLock;
+
+    private BlockingQueue<JSONObject> pushQueue;
+    private Thread pushThread;
 
     @Nullable
     @Override
@@ -73,8 +78,8 @@ public class TrackerService extends Service {
             @Override
             public void onLocationResult(LocationResult locationResult) {
                 if (locationResult != null) {
-                    sendLocation(locationResult.getLastLocation());
                     Log.d(TAG, "Got location");
+                    sendLocation(locationResult.getLastLocation());
                 }
             }
         };
@@ -82,41 +87,27 @@ public class TrackerService extends Service {
         PowerManager pm = getSystemService(PowerManager.class);
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, TAG + "::WakeLock");
 
+        pushQueue = new LinkedBlockingQueue();
+
         super.onCreate();
     }
 
     private void sendLocation(Location location) {
-        new Thread(() -> {
-            try {
-                URL url = new URL(BuildConfig.SERVER_ADDRESS + "/locations");
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("POST");
-                conn.setRequestProperty("Content-Type", "application/json;charset=UTF-8");
-                conn.setRequestProperty("Authorization", "Bearer " + BuildConfig.HTTP_ACCESS_TOKEN);
-                conn.setDoOutput(true);
-
-                JSONObject body = new JSONObject();
-                body.put("time", location.getTime());
-                body.put("lat", location.getLatitude());
-                body.put("lon", location.getLongitude());
-                body.put("alt", location.getAltitude());
-                body.put("acc", location.getAccuracy());
-                body.put("bat", getSystemService(BatteryManager.class).getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY));
-                body.put("net", getNetworkType());
-                body.put("sig", getSignalLevel());
-
-                DataOutputStream os = new DataOutputStream(conn.getOutputStream());
-                os.writeBytes(body.toString());
-                os.flush();
-                os.close();
-
-                conn.getResponseCode();
-                conn.disconnect();
-                Log.d(TAG, "Posted location");
-            } catch (IOException | JSONException e) {
-                e.printStackTrace();
-            }
-        }).start();
+        try {
+            JSONObject datum = new JSONObject();
+            datum.put("time", location.getTime());
+            datum.put("lat", location.getLatitude());
+            datum.put("lon", location.getLongitude());
+            datum.put("alt", location.getAltitude());
+            datum.put("acc", location.getAccuracy());
+            datum.put("bat", getSystemService(BatteryManager.class).getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY));
+            datum.put("net", getNetworkType());
+            datum.put("sig", getSignalLevel());
+            pushQueue.put(datum);
+            Log.d(TAG, "Enqueued location");
+        } catch (JSONException | InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 
     private String getNetworkType() {
@@ -189,10 +180,48 @@ public class TrackerService extends Service {
         fusedLocationClient.requestLocationUpdates(locationRequest,
                 locationCallback,
                 Looper.getMainLooper());
+
+        pushThread = new Thread(() -> {
+            try {
+                while (true) {
+                    JSONObject datum = pushQueue.take();
+                    try {
+                        URL url = new URL(BuildConfig.SERVER_ADDRESS + "/locations");
+                        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                        conn.setRequestMethod("POST");
+                        conn.setRequestProperty("Content-Type", "application/json;charset=UTF-8");
+                        conn.setRequestProperty("Authorization", "Bearer " + BuildConfig.HTTP_ACCESS_TOKEN);
+                        conn.setDoOutput(true);
+
+                        DataOutputStream os = new DataOutputStream(conn.getOutputStream());
+                        os.writeBytes(datum.toString());
+                        os.flush();
+                        os.close();
+
+                        int res = conn.getResponseCode();
+                        conn.disconnect();
+                        Log.d(TAG, "Posted location with response " + res);
+                    } catch (IOException e) {
+                        Log.d(TAG, "Failed to post location, adding it back to the queue");
+                        try {
+                            pushQueue.add(datum);
+                        } catch (IllegalStateException ignored) {
+                            Log.d(TAG, "Discarding data point because queue is full");
+                        }
+                        Thread.sleep(5*1000 /* milliseconds */);
+                    }
+                }
+            } catch (InterruptedException ignored) {}
+        });
+        pushThread.start();
     }
 
     private void stopLocationUpdates() {
         fusedLocationClient.removeLocationUpdates(locationCallback);
+        if (pushThread != null) {
+            pushThread.interrupt();
+            pushThread = null;
+        }
     }
 
     private void createNotificationChannel() {
