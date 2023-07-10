@@ -5,6 +5,10 @@ def keyProperties = new Properties()
 keyProperties.load(new FileInputStream(keyPropertiesFile))
 
 android {
+    if (project.android.hasProperty("namespace")) {
+        namespace 'com.aleasto.zoro'
+    }
+
     signingConfigs {
         release {
             storeFile file(keyProperties['KEYSTORE_FILE'])
@@ -19,6 +23,7 @@ android {
     defaultConfig {
         applicationId "com.aleasto.zoro"
         minSdkVersion 29
+        //noinspection ExpiredTargetSdkVersion
         targetSdkVersion 29
         versionCode 1
         versionName "1.0"
